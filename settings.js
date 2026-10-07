@@ -4,6 +4,8 @@ const scale = document.getElementById('scale');
 const status = document.getElementById('status');
 const sample = document.getElementById('sample');
 const youtubeFormat = document.getElementById('youtube-format');
+const openAtLogin = document.getElementById('open-at-login');
+const clearCacheButton = document.getElementById('clear-cache');
 let state;
 let pending = Promise.resolve();
 let revision = 0;
@@ -17,6 +19,7 @@ function message(text, error = false) {
 function render(settings) {
     state = settings;
     youtubeFormat.value = settings.youtubeFormat;
+    openAtLogin.checked = settings.openAtLogin;
     volume.value = Math.round(settings.volume * 100);
     scale.value = Math.round(settings.scale * 100);
     document.getElementById('volume-value').textContent = `${volume.value} %`;
@@ -53,6 +56,31 @@ function update(patch) {
 volume.addEventListener('input', () => update({ volume: Number(volume.value) / 100 }));
 scale.addEventListener('input', () => update({ scale: Number(scale.value) / 100 }));
 youtubeFormat.addEventListener('change', () => update({ youtubeFormat: youtubeFormat.value }));
+openAtLogin.addEventListener('change', () => update({ openAtLogin: openAtLogin.checked }));
+
+function showCacheStatus(result) {
+    const label = document.getElementById('cache-status');
+    if (result.error) label.textContent = result.error;
+    else if (result.running) label.textContent = 'Nettoyage du cache en cours…';
+    else if (result.pending) label.textContent = 'Nettoyage programmé après le média en cours.';
+    else label.textContent = result.lastClear ? `Dernier nettoyage : ${new Date(result.lastClear).toLocaleString('fr-FR')}` : 'Premier nettoyage prévu au prochain moment sans lecture.';
+}
+async function refreshCacheStatus() {
+    try { showCacheStatus(await api.cacheStatus()); }
+    catch { document.getElementById('cache-status').textContent = 'État du cache indisponible.'; }
+}
+clearCacheButton.addEventListener('click', async () => {
+    clearCacheButton.disabled = true;
+    document.getElementById('cache-status').textContent = 'Nettoyage demandé…';
+    try { showCacheStatus(await api.clearCache()); }
+    catch { document.getElementById('cache-status').textContent = 'Impossible de vider le cache. Réessayez.'; }
+    finally { clearCacheButton.disabled = false; }
+});
+document.querySelector('.maintenance').addEventListener('toggle', refreshCacheStatus);
+const cacheStatusInterval = setInterval(() => {
+    if (document.querySelector('.maintenance').open) refreshCacheStatus();
+}, 3000);
+window.addEventListener('beforeunload', () => clearInterval(cacheStatusInterval));
 document.querySelectorAll('[data-position]').forEach(button => {
     button.addEventListener('click', () => update({ positionIndex: Number(button.dataset.position) }));
 });
@@ -71,6 +99,9 @@ api.onSettingsChanged(settings => { if (!writes) render(settings); });
 api.loadSettings().then(settings => {
     render(settings);
     document.getElementById('controls').disabled = false;
+    openAtLogin.disabled = false;
+    clearCacheButton.disabled = false;
+    refreshCacheStatus();
     for (const action of ['preview', 'stop', 'reset']) document.getElementById(action).disabled = false;
     message('Tous les réglages sont enregistrés.');
 }).catch(() => message('Impossible de charger les réglages. Fermez puis rouvrez la configuration.', true));

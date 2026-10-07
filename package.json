@@ -18,6 +18,8 @@
     },
     "files": [
       "main.js",
+      "cache-maintenance.js",
+      "startup.js",
       "preload.js",
       "settings.html",
       "settings.js",

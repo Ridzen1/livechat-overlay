@@ -26,6 +26,7 @@ async function waitFor(callback) {
     await waitFor(() => config.webContents.executeJavaScript('!document.getElementById("controls").disabled'));
     await config.webContents.executeJavaScript(`(async () => {
         await window.electronAPI.settingsAction('reset');
+        await window.electronAPI.saveSettings({openAtLogin: true});
         volume.value = 37; volume.dispatchEvent(new Event('input'));
         scale.value = 95; scale.dispatchEvent(new Event('input'));
         document.querySelector('[data-position="2"]').click();
@@ -33,7 +34,7 @@ async function waitFor(callback) {
     })()`);
     const settings = await overlay.webContents.executeJavaScript('({ volume: currentVolume, scale: currentScale, positionIndex: currentPosIndex })');
     assert.deepEqual(settings, { volume: .37, scale: .95, positionIndex: 2 });
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8')), { ...settings, youtubeFormat: 'auto' });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8')), { ...settings, youtubeFormat: 'auto', openAtLogin: true });
     await config.webContents.executeJavaScript(`youtubeFormat.value = 'portrait'; youtubeFormat.dispatchEvent(new Event('change')); pending`);
     assert.equal(await overlay.webContents.executeJavaScript('currentYoutubeFormat'), 'portrait');
     await overlay.webContents.executeJavaScript('changeVolume(.1)');
@@ -44,12 +45,23 @@ async function waitFor(callback) {
     assert.equal(await overlay.webContents.executeJavaScript('widget.style.display'), 'none');
     await config.webContents.executeJavaScript('window.electronAPI.settingsAction("reset")');
     assert.equal(await overlay.webContents.executeJavaScript('currentScale'), .7);
+    await config.webContents.executeJavaScript(`openAtLogin.checked = false; openAtLogin.dispatchEvent(new Event('change')); pending`);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8')).openAtLogin, false);
+    await session.defaultSession.cookies.set({ url: 'https://cache-test.example', name: 'keep', value: 'yes' });
+    await config.webContents.executeJavaScript(`localStorage.setItem('cache-test', 'keep')`);
+    const cleared = await config.webContents.executeJavaScript('window.electronAPI.clearCache()');
+    assert.ok(cleared.lastClear > 0);
+    assert.equal(cleared.error, null);
+    assert.equal((await session.defaultSession.cookies.get({ name: 'keep' }))[0].value, 'yes');
+    assert.equal(await config.webContents.executeJavaScript(`localStorage.getItem('cache-test')`), 'keep');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8')).openAtLogin, false);
     BrowserWindow.prototype.showInactive.call(config);
     await sleep(600);
     const bounds = await config.webContents.executeJavaScript('({ scroll: document.documentElement.scrollHeight, viewport: innerHeight, width:innerWidth, boxes: [...document.querySelectorAll("header, main, .shortcuts, footer")].map(x=>({tag:x.tagName,height:x.getBoundingClientRect().height})) })');
     assert.ok(bounds.scroll <= bounds.viewport, JSON.stringify(bounds));
     fs.writeFileSync(path.join(profile, 'configuration.png'), (await config.webContents.capturePage()).toPNG());
     config.close();
+    await waitFor(() => config.isDestroyed());
     await overlay.webContents.executeJavaScript('window.electronAPI.openSettings()');
     await waitFor(() => BrowserWindow.getAllWindows().some(window => window.webContents.getURL().endsWith('/settings') && !window.webContents.isLoading()));
     const close = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/close'));
@@ -59,6 +71,9 @@ async function waitFor(callback) {
     assert.equal(await overlay.webContents.executeJavaScript('widget.style.top'), '10px');
     await overlay.webContents.executeJavaScript(`handleMessage({data: JSON.stringify({type:'play_media', text:'Test de fermeture', author:'Alice'})})`);
     await waitFor(() => close.isVisible());
+    const reopened = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/settings'));
+    assert.equal(await reopened.webContents.executeJavaScript('openAtLogin.checked'), false);
+    assert.equal((await reopened.webContents.executeJavaScript('window.electronAPI.clearCache()')).pending, true);
     for (const positionIndex of [0, 1, 2, 3]) {
         await overlay.webContents.executeJavaScript(`applySettings({positionIndex: ${positionIndex}, scale: 0.9})`);
         const rect = await overlay.webContents.executeJavaScript('({right: authorContainer.getBoundingClientRect().right, top: authorContainer.getBoundingClientRect().top, height: authorContainer.getBoundingClientRect().height})');
@@ -67,6 +82,7 @@ async function waitFor(callback) {
     }
     await close.webContents.executeJavaScript('document.getElementById("stop").click()');
     await waitFor(() => !close.isVisible());
+    await waitFor(() => reopened.webContents.executeJavaScript('window.electronAPI.cacheStatus().then(s => !s.pending && !s.running)'));
     assert.equal(overlay.isDestroyed(), false);
     assert.equal(await overlay.webContents.executeJavaScript('widget.style.display'), 'none');
     await overlay.webContents.executeJavaScript(`handleMessage({data: JSON.stringify({type:'play_media', text:'Le prochain message fonctionne'})})`);

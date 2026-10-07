@@ -291,6 +291,10 @@
         if (!data || data.type !== 'play_media') return;
         hideWidget();
         const token = generation;
+        if (window.electronAPI?.prepareMedia) {
+            const ready = await window.electronAPI.prepareMedia();
+            if (!ready || token !== generation) return;
+        }
         resolutionController = new AbortController();
         const signal = resolutionController.signal;
         widget.style.display = 'flex';

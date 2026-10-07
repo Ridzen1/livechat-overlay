@@ -9,6 +9,7 @@ app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 ipcMain.handle('load-settings', () => null);
 ipcMain.handle('save-settings', () => {});
+ipcMain.handle('prepare-media', () => true);
 let server;
 const deadline = setTimeout(() => { console.error('Smoke test timed out'); app.exit(1); }, 55000);
 app.whenReady().then(async () => {

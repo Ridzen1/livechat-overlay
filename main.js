@@ -4,6 +4,12 @@ const fs = require('fs');
 const { startOverlayServer } = require('./overlay-server');
 const { safeUrl } = require('./media-utils');
 const { configureMediaRequests } = require('./media-network');
+const { createCacheMaintenance } = require('./cache-maintenance');
+const { applyStartupSetting } = require('./startup');
+let cacheMaintenance;
+let cacheCheckInterval;
+let cacheIdleTimeout;
+let mediaStateRevision = 0;
 let overlayServer;
 let overlayOrigin;
 let topmostInterval;
@@ -13,7 +19,7 @@ let closeWindow = null;
 let mediaActive = false;
 let closeButtonReady = false;
 let mediaControlBounds = null;
-const DEFAULT_SETTINGS = { volume: 1, scale: 0.7, positionIndex: 0, youtubeFormat: 'auto' };
+const DEFAULT_SETTINGS = { volume: 1, scale: 0.7, positionIndex: 0, youtubeFormat: 'auto', openAtLogin: true };
 
 function trustedSettingsSender(event) {
   return settingsWindow && !settingsWindow.isDestroyed() && event.sender === settingsWindow.webContents && event.senderFrame === settingsWindow.webContents.mainFrame && event.senderFrame.url === overlayOrigin + '/settings';
@@ -36,6 +42,7 @@ function sanitizeSettings(value) {
   if (Number.isFinite(value?.scale)) settings.scale = Math.max(0.3, Math.min(1.5, value.scale));
   if (Number.isInteger(value?.positionIndex) && value.positionIndex >= 0 && value.positionIndex < 4) settings.positionIndex = value.positionIndex;
   if (['auto', 'portrait', 'landscape'].includes(value?.youtubeFormat)) settings.youtubeFormat = value.youtubeFormat;
+  if (typeof value?.openAtLogin === 'boolean') settings.openAtLogin = value.openAtLogin;
   return settings;
 }
 
@@ -65,6 +72,10 @@ function saveSettingsToDisk(settings) {
 function updateSettings(patch) {
   const next = sanitizeSettings({ ...currentSettings, ...patch });
   saveSettingsToDisk(next);
+  if (Object.hasOwn(patch, 'openAtLogin') && next.openAtLogin !== currentSettings.openAtLogin) {
+    try { applyStartupSetting(app, next.openAtLogin, process.env.PORTABLE_EXECUTABLE_FILE); }
+    catch (error) { saveSettingsToDisk(currentSettings); throw error; }
+  }
   currentSettings = next;
   for (const window of [mainWindow, settingsWindow]) {
     if (window && !window.isDestroyed()) window.webContents.send('settings-changed', currentSettings);
@@ -82,6 +93,11 @@ ipcMain.handle('save-settings', (event, settings) => {
   const patch = {};
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
     if (Object.hasOwn(settings, key)) {
+      if (key === 'openAtLogin') {
+        if (typeof settings[key] !== 'boolean') throw new Error('Réglages invalides');
+        patch[key] = settings[key];
+        continue;
+      }
       if (key === 'youtubeFormat') {
         if (!['auto', 'portrait', 'landscape'].includes(settings[key])) throw new Error('Format invalide');
         patch[key] = settings[key];
@@ -99,8 +115,49 @@ ipcMain.handle('open-settings', event => {
 ipcMain.on('media-active', (event, active) => {
   if (!trustedSender(event) || typeof active !== 'boolean') return;
   mediaActive = active;
+  mediaStateRevision++;
   updateCloseButton();
+  scheduleCacheCheck();
 });
+ipcMain.handle('prepare-media', async event => {
+  if (!trustedSender(event)) throw new Error('Accès refusé');
+  const revision = mediaStateRevision;
+  await cacheMaintenance?.waitForClear();
+  if (revision !== mediaStateRevision) return false;
+  mediaActive = true;
+  return true;
+});
+ipcMain.handle('cache-status', event => {
+  if (!trustedSettingsSender(event)) throw new Error('Accès refusé');
+  return cacheMaintenance.status();
+});
+ipcMain.handle('clear-cache', async event => {
+  if (!trustedSettingsSender(event)) throw new Error('Accès refusé');
+  return cacheMaintenance.request();
+});
+
+function scheduleCacheCheck() {
+  clearTimeout(cacheIdleTimeout);
+  if (!mediaActive) cacheIdleTimeout = setTimeout(() => cacheMaintenance?.check(), 2000);
+}
+
+function startCacheMaintenance() {
+  const metadataPath = path.join(app.getPath('userData'), 'cache-maintenance.json');
+  cacheMaintenance = createCacheMaintenance({
+    sessions: () => [session.defaultSession, session.fromPartition('instagram-scraper')],
+    isBusy: () => mediaActive || Boolean(cancelInstagramScrape),
+    readLastClear: () => {
+      try { return JSON.parse(fs.readFileSync(metadataPath, 'utf8')).lastClear; } catch { return 0; }
+    },
+    writeLastClear: lastClear => {
+      fs.mkdirSync(path.dirname(metadataPath), { recursive: true });
+      fs.writeFileSync(metadataPath + '.tmp', JSON.stringify({ lastClear }));
+      fs.renameSync(metadataPath + '.tmp', metadataPath);
+    }
+  });
+  cacheCheckInterval = setInterval(() => cacheMaintenance.check(), 60000);
+  scheduleCacheCheck();
+}
 ipcMain.on('media-control-bounds', (event, bounds) => {
   if (!trustedSender(event) || !Number.isFinite(bounds?.x) || !Number.isFinite(bounds?.y)) return;
   mediaControlBounds = bounds;
@@ -147,7 +204,7 @@ function createCloseButton() {
 }
 ipcMain.handle('settings-action', (event, action) => {
   if (!trustedSettingsSender(event)) throw new Error('Accès refusé');
-  if (action === 'reset') return updateSettings(DEFAULT_SETTINGS);
+  if (action === 'reset') return updateSettings({ ...DEFAULT_SETTINGS, openAtLogin: currentSettings.openAtLogin });
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (action === 'preview') return mainWindow.webContents.executeJavaScript('showConfigurationPreview()');
     if (action === 'stop') return mainWindow.webContents.executeJavaScript('hideWidget()');
@@ -433,6 +490,7 @@ else app.whenReady().then(async () => {
   const local = await startOverlayServer(__dirname);
   overlayServer = local.server;
   overlayOrigin = local.origin;
+  startCacheMaintenance();
   configureMediaRequests(session.defaultSession);
   createWindow();
   createCloseButton();
@@ -442,10 +500,14 @@ else app.whenReady().then(async () => {
   });
   createTray();
 
-  if (app.isPackaged) app.setLoginItemSettings({
-    openAtLogin: true,
-    path: process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe')
-  });
+  // Import the current Windows choice on migration; never force-enable it at startup.
+  if (typeof loadSettingsFromDisk()?.openAtLogin !== 'boolean') {
+    if (app.isPackaged && process.platform === 'win32') {
+      const login = app.getLoginItemSettings({ path: process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe'), args: [] });
+      currentSettings.openAtLogin = Boolean(login.openAtLogin && login.executableWillLaunchAtLogin !== false);
+    }
+    saveSettingsToDisk(currentSettings);
+  }
 
   globalShortcut.register('CommandOrControl+Alt+O', openSettings);
 
@@ -490,6 +552,8 @@ else app.whenReady().then(async () => {
 }).catch(error => { console.error('[Démarrage]', error); app.quit(); });
 
 app.on('before-quit', () => {
+  clearInterval(cacheCheckInterval);
+  clearTimeout(cacheIdleTimeout);
   clearInterval(topmostInterval);
   globalShortcut.unregisterAll();
   overlayServer?.close();

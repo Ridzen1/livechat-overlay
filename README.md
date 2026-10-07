@@ -24,6 +24,12 @@ La petite croix à droite du pseudo de l'émetteur apparaît uniquement lorsqu'u
 
 Le format YouTube **Automatique** utilise un lecteur vertical 9:16 pour les liens `/shorts/` et horizontal 16:9 pour les autres liens. Pour une vidéo verticale partagée avec un lien `youtu.be` ou `watch`, choisir **Vertical**. Le changement redimensionne le lecteur en cours sans relancer la vidéo. Cela évite les bandes latérales dues au lecteur horizontal, mais ne supprime pas les bandes encodées dans la vidéo. À faible zoom, le lecteur conserve une surface minimale de 200 × 200 pixels.
 
+## Application et cache
+
+Dans **Application & maintenance**, la case **Démarrer avec Windows** permet d'activer ou désactiver le démarrage automatique de l'exécutable portable. Au premier lancement de cette version, le choix déjà présent dans Windows est conservé. La remise à zéro des réglages d'affichage ne modifie pas ce choix. En développement, cette case ne modifie pas le démarrage de Windows.
+
+Le cache réseau est vidé au premier moment sans lecture, puis au plus tôt tous les sept jours pendant que l'application fonctionne. La date du dernier nettoyage est conservée entre les lancements. **Vider le cache maintenant** déclenche aussi ce nettoyage ; si un média est en cours, la demande attend sa fin. Le cache principal correspond normalement à `%APPDATA%\livechat-overlay\Cache\Cache_Data`. Le nettoyage utilise l'API Electron et préserve les cookies, le stockage local et les réglages. Les données du cache peuvent réapparaître dès qu'une nouvelle requête les recrée.
+
 ## Raccourcis clavier
 
 | Raccourci | Action |
@@ -52,11 +58,25 @@ npm start
 
 ## Générer l'exécutable Windows
 
-```bash
+Depuis Windows, installer Node.js, puis ouvrir PowerShell dans le dossier du projet. Installer les dépendances à partir du fichier de verrouillage et lancer les tests avant de compiler :
+
+```powershell
+npm ci
+npm test
 npm run build
 ```
 
-L'exécutable portable est généré dans le dossier `dist/`.
+Le fichier **portable à récupérer et à distribuer** est :
+
+```text
+dist\livechat-overlay 1.0.0.exe
+```
+
+Le numéro dans le nom correspond à la version définie dans `package.json`. Ce fichier contient l'application et ses dépendances ; il peut être copié seul sur un autre PC Windows x64. Pour une release GitHub, joindre ce fichier à la release. Il peut être renommé `livechat-overlay.exe` après compilation.
+
+**Ne pas distribuer seul `dist\win-unpacked\livechat-overlay.exe`.** Cet exécutable dépend des DLL, du dossier `resources` et des autres fichiers présents dans `win-unpacked`. Copié seul, il ne peut pas lancer l'application correctement. Pour distribuer cette variante, il faut zipper le dossier `win-unpacked` complet, puis extraire toute l'archive avant de lancer l'exécutable.
+
+Au lancement, l'overlay reste transparent tant qu'aucun message n'arrive. Son icône apparaît dans la zone de notification de Windows, éventuellement derrière la flèche des icônes masquées. Double-cliquer dessus ou utiliser `Ctrl+Alt+O` pour ouvrir la configuration et afficher un message de test.
 
 Le build est non signé et désactive l'édition des ressources de l'exécutable (`signAndEditExecutable: false`) pour éviter le besoin de liens symboliques/privilèges supplémentaires avec l'outil de packaging. L'exécutable conserve donc les ressources Electron par défaut ; l'icône de notification utilise `icon.png`. Seuls les fichiers nécessaires à l'application sont inclus ; les anciens fichiers `*-player-script.js` ne sont ni exécutés ni distribués.
 

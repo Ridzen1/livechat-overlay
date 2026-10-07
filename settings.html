@@ -31,13 +31,19 @@ button[aria-pressed=true] { color: #f4d46d; border-color: #f4d46d; background: #
 button:disabled { cursor: wait; opacity: .5; }
 .primary { background: #f4d46d; border-color: #f4d46d; color: #191b23; font-weight: 700; }
 .primary:hover { background: #ffe393; }
-.monitor { position: relative; height: 150px; margin: 18px 0; border: 1px solid #45536b; border-radius: 10px; overflow: hidden; background: radial-gradient(ellipse at 20% 80%, #354660, #111a28); }
+.monitor { position: relative; height: 125px; margin: 18px 0; border: 1px solid #45536b; border-radius: 10px; overflow: hidden; background: radial-gradient(ellipse at 20% 80%, #354660, #111a28); }
 .desktop { position: absolute; left: 16px; top: 16px; color: #8190a7; font-size: 10px; letter-spacing: 1px; }
 #sample { position: absolute; top: 12px; right: 12px; transform-origin: top right; max-width: 150px; }
 .sample-author { background: #0a0e16; border-radius: 20px; padding: 5px 10px; font-size: 10px; margin-bottom: 5px; }
 .sample-message { background: #efce69; color: #222330; border-radius: 6px; padding: 13px; font-size: 15px; font-weight: 800; }
 .actions { display: grid; gap: 9px; margin-top: 18px; }
 .hint { font-size: 12px; }
+.maintenance { margin-top:16px; padding-top:12px; border-top:1px solid #3b485e; }
+.maintenance summary { cursor:pointer; font-weight:600; }
+.maintenance label { display:flex; align-items:center; gap:10px; margin:16px 0; line-height:1.5; }
+.maintenance input { accent-color:#f4d46d; }
+.maintenance button { margin-top:12px; width:100%; }
+#cache-status { margin-top:8px; }
 .shortcuts { margin-top: 14px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .keys { display: grid; grid-template-columns: auto auto auto auto; gap: 7px 14px; font-size: 12px; color: #a3afc4; }
 kbd { font: 11px 'Segoe UI', sans-serif; color: #e1e7f1; }
@@ -69,6 +75,12 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 <p class="hint">L’aperçu ci-dessus est schématique. Affichez un message de test pour vérifier le résultat sur votre écran.</p>
 <div class="actions"><button id="preview" class="primary" disabled>Afficher un message de test</button><button id="stop" disabled>Arrêter le média en cours</button></div>
 <p class="hint" style="margin-top:12px">Le test remplace le média en cours et disparaît après 10 secondes.</p>
+<details class="maintenance"><summary>Application & maintenance</summary>
+<label><input id="open-at-login" type="checkbox" disabled>Démarrer avec Windows</label>
+<p class="hint">Cache réseau nettoyé automatiquement chaque semaine, hors lecture. Cookies et réglages conservés.</p>
+<button id="clear-cache" disabled>Vider le cache maintenant</button>
+<p id="cache-status" class="hint" role="status" aria-live="polite"></p>
+</details>
 </section>
 </main>
 <section class="panel shortcuts"><h2 style="margin:0">Toujours à portée de main</h2><div class="keys"><span>Configuration</span><kbd>Ctrl + Alt + O</kbd><span>Arrêter le média</span><kbd>Ctrl + Alt + X</kbd><span>Taille / volume</span><kbd>Ctrl + Alt + ↑ ↓ / ← →</kbd><span>Position</span><kbd>Ctrl + Alt + P</kbd></div></section>
