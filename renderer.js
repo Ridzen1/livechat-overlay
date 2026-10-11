@@ -15,7 +15,7 @@
     let currentVolume = 1; // Volume actuel (0 à 1), 100% par défaut
     let volumeIndicatorTimeout = null;
 
-    const { safeUrl, hostMatches, youtubeVideo, tenorPage } = MediaUtils;
+    const { safeUrl, hostMatches, youtubeVideo, gifPage, gifLink } = MediaUtils;
     let generation = 0;
     let resolutionController = null;
     let youtubePlayer = null;
@@ -175,8 +175,8 @@
     async function buildMediaElement(value, signal) {
         const url = safeUrl(value);
         if (!url) throw new Error('URL média invalide');
-        if (tenorPage(url.href)) {
-            const gif = await window.electronAPI.resolveTenorGif(url.href);
+        if (gifPage(url.href)) {
+            const gif = await window.electronAPI.resolveGif(url.href);
             return mediaElement(gif);
         }
         let resolved = null;
@@ -314,7 +314,7 @@
         armTimeout(token, 30000, () => mediaFailure(token, 'Chargement du média impossible'));
         try {
             // Some bots forward plain text without populating the URL field.
-            const textLink = typeof data.text === 'string' ? data.text.match(/https?:\/\/[^\s<>]+/g)?.find(link => youtubeVideo(link) || tenorPage(link)) : null;
+            const textLink = typeof data.text === 'string' ? data.text.match(/https?:\/\/[^\s<>]+/g)?.find(link => youtubeVideo(link) || gifLink(link)) : null;
             const value = data.url || textLink;
             if (!value) { armTimeout(token, 10000); return; }
             const youtube = youtubeVideo(value);

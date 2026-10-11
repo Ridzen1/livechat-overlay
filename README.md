@@ -84,9 +84,18 @@ Le build est non signé et désactive l'édition des ressources de l'exécutable
 
 Le bot peut transmettre le lien direct d'une pièce jointe `.gif` dans le champ `url` d'un message `play_media`. Le GIF est animé dans l'overlay, affiché pendant 10 secondes après chargement, et peut être arrêté avec la croix. Il faut conserver l'URL complète, y compris ses paramètres de signature : les liens de pièces jointes Discord peuvent expirer. Le bot doit utiliser le lien actuel fourni par Discord.
 
-Les pages Tenor `https://tenor.com/view/...` et leurs variantes localisées comme `/fr/view/...` sont résolues automatiquement vers le GIF. Par exemple : `!livechat https://tenor.com/fr/view/the-rock-stare-thinking-gif-5680807550909397990`. Le bot doit transmettre un message `play_media` contenant le lien dans `url` ou dans `text`. Le chargement de la page est limité à 10 secondes et annulé à l'arrêt ou au remplacement du média.
+Les sources suivantes sont reconnues dans `url` ou dans le texte de la commande transmis par le bot :
 
-Un lien de message `discord.com/channels/...` n'est pas résolu. Le bot Discord n'est pas inclus dans ce dépôt : son acceptation de la commande et la transmission du lien restent à vérifier séparément. La résolution Tenor dépend des métadonnées publiques de ses pages et peut nécessiter une adaptation si elles changent.
+| Source | Liens acceptés |
+|---|---|
+| Tenor | `tenor.com/view/...`, y compris `/fr/view/...` |
+| Giphy | `giphy.com/gifs/...`, `/stickers/...` et `/embed/...` |
+| GIFDB | `gifdb.com/gif/....html` |
+| Liens directs | Fichiers `.gif` et `.webp` accessibles publiquement, notamment pièces jointes Discord et CDN de GIF |
+
+Exemple : `!livechat https://giphy.com/gifs/confused-flying-YsTs5ltWtEhnq`. Le bot doit transmettre un message `play_media` contenant le lien dans `url` ou dans `text`. Un WebP s'anime uniquement si le fichier lui-même est animé. La résolution des pages est limitée à 10 secondes et annulée à l'arrêt ou au remplacement du média. Giphy utilise son point d'accès public oEmbed ; Tenor et GIFDB utilisent les métadonnées de leurs pages.
+
+Les liens de messages Discord, les liens raccourcis (`gph.is`), les pages de recherche et les pages d'autres hébergeurs ne sont pas résolus : utiliser leur lien direct vers le fichier. Le bot Discord n'est pas inclus dans ce dépôt ; son acceptation de la commande et la transmission du lien restent à vérifier séparément. La résolution des pages peut nécessiter une adaptation si les services changent.
 
 ## Envoyer une vidéo YouTube
 

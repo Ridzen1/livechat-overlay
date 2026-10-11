@@ -28,7 +28,7 @@
       "index.html",
       "renderer.js",
       "media-utils.js",
-      "tenor.js",
+      "gif-sources.js",
       "media-network.js",
       "overlay-server.js",
       "icon.png",

@@ -102,11 +102,12 @@ async function waitFor(callback) {
     await overlay.webContents.executeJavaScript('hideWidget()');
     await waitFor(() => !close.isVisible());
     console.log('Settings native checks passed, including conditional stop button, next message and unchanged top-right position.');
-    if (process.env.TENOR_URL) {
-        await overlay.webContents.executeJavaScript(`handleMessage({data:JSON.stringify({type:'play_media', text:${JSON.stringify('!livechat ' + process.env.TENOR_URL)}})})`);
+    const gifUrls = process.env.GIF_URLS ? JSON.parse(process.env.GIF_URLS) : process.env.TENOR_URL ? [process.env.TENOR_URL] : [];
+    for (const url of gifUrls) {
+        await overlay.webContents.executeJavaScript(`handleMessage({data:JSON.stringify({type:'play_media', text:${JSON.stringify('!livechat ' + url)}})})`);
         await waitFor(() => overlay.webContents.executeJavaScript('Boolean(container.querySelector("img")?.naturalWidth)'));
         assert.ok(close.isVisible());
-        console.log('Tenor GIF loaded:', await overlay.webContents.executeJavaScript('container.querySelector("img").src'));
+        console.log('GIF loaded:', await overlay.webContents.executeJavaScript('container.querySelector("img").src'));
         await close.webContents.executeJavaScript('document.getElementById("stop").click()');
         await waitFor(() => !close.isVisible());
         assert.equal(await overlay.webContents.executeJavaScript('container.children.length'), 0);

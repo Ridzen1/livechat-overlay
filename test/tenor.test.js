@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { tenorPage } = require('../media-utils');
-const { extractTenorGif, resolveTenorGif } = require('../tenor');
+const { extractGif: extractTenorGif, resolveGif: resolveTenorGif } = require('../gif-sources');
 const page = 'https://tenor.com/fr/view/the-rock-stare-thinking-gif-5680807550909397990';
 const gif = 'https://media1.tenor.com/m/TtZIXo1Pu-YAAAAC/the-rock-stare.gif';
 test('Tenor page validation accepts localized links but rejects other destinations', () => {

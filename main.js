@@ -1,6 +1,6 @@
 const { app, BrowserWindow, session, screen, globalShortcut, Tray, Menu, nativeImage, ipcMain, net } = require('electron');
-const { resolveTenorGif } = require('./tenor');
-let tenorRequest = null;
+const { resolveGif } = require('./gif-sources');
+let gifRequest = null;
 const path = require('path');
 const fs = require('fs');
 const { startOverlayServer } = require('./overlay-server');
@@ -117,7 +117,7 @@ ipcMain.handle('open-settings', event => {
 ipcMain.on('media-active', (event, active) => {
   if (!trustedSender(event) || typeof active !== 'boolean') return;
   mediaActive = active;
-  if (!active) tenorRequest?.abort();
+  if (!active) gifRequest?.abort();
   mediaStateRevision++;
   updateCloseButton();
   scheduleCacheCheck();
@@ -130,13 +130,13 @@ ipcMain.handle('prepare-media', async event => {
   mediaActive = true;
   return true;
 });
-ipcMain.handle('resolve-tenor-gif', async (event, value) => {
+ipcMain.handle('resolve-gif', async (event, value) => {
   if (!trustedSender(event)) throw new Error('Accès refusé');
-  tenorRequest?.abort();
+  gifRequest?.abort();
   const request = new AbortController();
-  tenorRequest = request;
-  try { return await resolveTenorGif(value, (url, options) => net.fetch(url, options), request.signal); }
-  finally { if (tenorRequest === request) tenorRequest = null; }
+  gifRequest = request;
+  try { return await resolveGif(value, (url, options) => net.fetch(url, options), request.signal); }
+  finally { if (gifRequest === request) gifRequest = null; }
 });
 ipcMain.handle('cache-status', event => {
   if (!trustedSettingsSender(event)) throw new Error('Accès refusé');
@@ -571,7 +571,7 @@ else app.whenReady().then(async () => {
 }).catch(error => { console.error('[Démarrage]', error); app.quit(); });
 
 app.on('before-quit', () => {
-  tenorRequest?.abort();
+  gifRequest?.abort();
   clearInterval(cacheCheckInterval);
   clearTimeout(cacheIdleTimeout);
   clearInterval(topmostInterval);
