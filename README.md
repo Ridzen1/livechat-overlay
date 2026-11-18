@@ -30,6 +30,24 @@ Dans **Application & maintenance**, la case **Démarrer avec Windows** permet d'
 
 Le cache réseau est vidé au premier moment sans lecture, puis au plus tôt tous les sept jours pendant que l'application fonctionne. La date du dernier nettoyage est conservée entre les lancements. **Vider le cache maintenant** déclenche aussi ce nettoyage ; si un média est en cours, la demande attend sa fin. Le cache principal correspond normalement à `%APPDATA%\livechat-overlay\Cache\Cache_Data`. Le nettoyage utilise l'API Electron et préserve les cookies, le stockage local et les réglages. Les données du cache peuvent réapparaître dès qu'une nouvelle requête les recrée.
 
+## Mises à jour
+
+Une fois packagée, l'application vérifie la dernière release GitHub de ce dépôt environ 15 secondes après son lancement, puis toutes les 6 heures. Si le tag de la release est plus récent que la version de l'application, une fenêtre propose :
+
+- **Télécharger** : ouvre le téléchargement dans le navigateur (le fichier `.exe` joint à la release, sinon le `.zip`, sinon la page de la release). Il suffit ensuite de quitter l'application et de lancer le nouveau fichier ; les réglages sont conservés.
+- **Plus tard** : la fenêtre ne réapparaît pas avant le prochain lancement.
+- **Ignorer cette version** : plus aucune proposition pour cette version ; la suivante sera proposée normalement.
+
+Le menu de l'icône de notification contient aussi **Rechercher une mise à jour…**, qui indique si l'application est à jour. Les brouillons et pré-releases GitHub ne sont jamais proposés. En développement (`npm start`), aucune vérification automatique n'a lieu.
+
+### Publier une nouvelle version
+
+1. Augmenter `version` dans `package.json` (par exemple `2.2.0` → `2.3.0`), puis lancer `npm install` pour mettre à jour `package-lock.json`.
+2. Compiler avec `npm run build`.
+3. Créer une release GitHub dont le **tag** est ce numéro de version (`2.3` ou `v2.3.0` conviennent), marquée comme *latest*, et y joindre l'exécutable portable (`.exe`) ou une archive `.zip`. La description de la release est affichée comme « Nouveautés » dans la fenêtre.
+
+Le tag doit être supérieur à la version compilée dans l'application, sinon personne ne verra la mise à jour. À l'inverse, si `package.json` n'est pas augmenté, l'application continuera de proposer la release qu'elle est déjà.
+
 ## Raccourcis clavier
 
 | Raccourci | Action |
@@ -69,7 +87,7 @@ npm run build
 Le fichier **portable à récupérer et à distribuer** est :
 
 ```text
-dist\livechat-overlay 1.0.0.exe
+dist\livechat-overlay 2.2.0.exe
 ```
 
 Le numéro dans le nom correspond à la version définie dans `package.json`. Ce fichier contient l'application et ses dépendances ; il peut être copié seul sur un autre PC Windows x64. Pour une release GitHub, joindre ce fichier à la release. Il peut être renommé `livechat-overlay.exe` après compilation.

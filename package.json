@@ -1,6 +1,6 @@
 {
   "name": "livechat-overlay",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "description": "Overlay de chat pour afficher du texte, des images et des vidéos",
   "main": "main.js",
   "scripts": {
@@ -20,6 +20,7 @@
       "main.js",
       "cache-maintenance.js",
       "startup.js",
+      "update-check.js",
       "preload.js",
       "settings.html",
       "settings.js",
@@ -34,6 +35,10 @@
       "icon.png",
       "package.json"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ridzen1/livechat-overlay.git"
   },
   "keywords": [],
   "author": "",

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, screen, globalShortcut, Tray, Menu, nativeImage, ipcMain, net } = require('electron');
+const { app, BrowserWindow, session, screen, globalShortcut, Tray, Menu, nativeImage, ipcMain, net, dialog, shell } = require('electron');
 const { resolveGif } = require('./gif-sources');
 let gifRequest = null;
 const path = require('path');
@@ -8,6 +8,11 @@ const { safeUrl } = require('./media-utils');
 const { configureMediaRequests } = require('./media-network');
 const { createCacheMaintenance } = require('./cache-maintenance');
 const { applyStartupSetting } = require('./startup');
+const { checkForUpdate, isGithubUrl } = require('./update-check');
+let updateCheckInterval;
+let updateCheckTimeout;
+let updateDialogOpen = false;
+const notifiedUpdates = new Set();
 let cacheMaintenance;
 let cacheCheckInterval;
 let cacheIdleTimeout;
@@ -388,6 +393,67 @@ ipcMain.handle('resolve-instagram-video', async (event, url) => {
   return await scrapeInstagramVideo(parsed.href);
 });
 
+// --- MISES À JOUR (releases GitHub) ---
+// Au lancement puis toutes les 6 heures, l'app compare sa version (package.json)
+// au tag de la dernière release GitHub et propose de télécharger la nouvelle.
+const UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000;
+const updateStatePath = path.join(app.getPath('userData'), 'update-check.json');
+
+function readSkippedVersion() {
+  try { return JSON.parse(fs.readFileSync(updateStatePath, 'utf8')).skippedVersion ?? null; } catch { return null; }
+}
+
+function writeSkippedVersion(version) {
+  try {
+    fs.mkdirSync(path.dirname(updateStatePath), { recursive: true });
+    fs.writeFileSync(updateStatePath + '.tmp', JSON.stringify({ skippedVersion: version }));
+    fs.renameSync(updateStatePath + '.tmp', updateStatePath);
+  } catch (error) { console.error('[Mise à jour] Impossible de mémoriser le choix :', error.message || error); }
+}
+
+async function runUpdateCheck({ manual = false } = {}) {
+  if (updateDialogOpen) return;
+  let update;
+  try {
+    update = await checkForUpdate({ currentVersion: app.getVersion(), fetch: (url, options) => net.fetch(url, options), signal: AbortSignal.timeout(15000) });
+  } catch (error) {
+    console.error('[Mise à jour] Vérification impossible :', error.message || error);
+    if (manual) await dialog.showMessageBox({ type: 'error', title: 'Livechat Overlay', message: 'Impossible de vérifier les mises à jour.', detail: 'Vérifiez votre connexion Internet puis réessayez.' });
+    return;
+  }
+  if (!update) {
+    if (manual) await dialog.showMessageBox({ type: 'info', title: 'Livechat Overlay', message: 'Livechat Overlay est à jour.', detail: `Version installée : ${app.getVersion()}` });
+    return;
+  }
+  if (!manual && (notifiedUpdates.has(update.version) || readSkippedVersion() === update.version)) return;
+  notifiedUpdates.add(update.version);
+  updateDialogOpen = true;
+  try {
+    const { response } = await dialog.showMessageBox({
+      type: 'info',
+      title: 'Mise à jour disponible',
+      message: `Une nouvelle version de Livechat Overlay est disponible : ${update.version}`,
+      detail: `Version installée : ${app.getVersion()}` + (update.notes ? `\n\nNouveautés :\n${update.notes}` : '') +
+        `\n\n${update.downloadUrl ? 'Le téléchargement s’ouvrira dans votre navigateur. Fermez ensuite l’application et lancez le nouveau fichier.' : 'La page de téléchargement s’ouvrira dans votre navigateur.'}`,
+      buttons: ['Télécharger', 'Plus tard', 'Ignorer cette version'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true
+    });
+    if (response === 0) {
+      const target = update.downloadUrl || update.pageUrl;
+      if (isGithubUrl(target)) await shell.openExternal(target);
+    } else if (response === 2) writeSkippedVersion(update.version);
+  } finally { updateDialogOpen = false; }
+}
+
+function startUpdateChecks() {
+  // En développement, la version de package.json ne correspond pas forcément aux releases.
+  if (!app.isPackaged) return;
+  updateCheckTimeout = setTimeout(() => runUpdateCheck(), 15000);
+  updateCheckInterval = setInterval(() => runUpdateCheck(), UPDATE_CHECK_INTERVAL);
+}
+
 function createTray() {
   const iconPath = path.join(__dirname, 'icon.png');
   const icon = nativeImage.createFromPath(iconPath);
@@ -445,6 +511,11 @@ function createTray() {
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.executeJavaScript('hideWidget()');
       }
     },
+    {
+      label: 'Rechercher une mise à jour…',
+      click: () => runUpdateCheck({ manual: true })
+    },
+    { type: 'separator' },
     {
       label: 'Quitter',
       click: () => {
@@ -518,6 +589,7 @@ else app.whenReady().then(async () => {
     positionCloseButton();
   });
   createTray();
+  startUpdateChecks();
 
   // Import the current Windows choice on migration; never force-enable it at startup.
   if (typeof loadSettingsFromDisk()?.openAtLogin !== 'boolean') {
@@ -574,6 +646,8 @@ app.on('before-quit', () => {
   gifRequest?.abort();
   clearInterval(cacheCheckInterval);
   clearTimeout(cacheIdleTimeout);
+  clearTimeout(updateCheckTimeout);
+  clearInterval(updateCheckInterval);
   clearInterval(topmostInterval);
   globalShortcut.unregisterAll();
   overlayServer?.close();
