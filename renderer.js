@@ -504,8 +504,13 @@
     let hasShownLaunchAnnouncement = false;
     let pingInterval = null;
 
+    let reconnectTimer = null;
+
     function connectWebSocket() {
-        ws = new WebSocket('wss://livechat-bot-0m01.onrender.com');
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+        const socket = new WebSocket('wss://livechat-bot-0m01.onrender.com');
+        ws = socket;
 
         ws.onopen = () => {
             console.log('Connecté au serveur Render !');
@@ -537,17 +542,51 @@
         ws.onmessage = handleMessage;
 
         ws.onclose = () => {
+            // Une ancienne connexion remplacée par reconnectWebSocket() ne doit
+            // pas relancer une seconde connexion en parallèle.
+            if (ws !== socket) return;
             clearInterval(pingInterval);
             pingInterval = null;
             console.log('Connexion perdue. Reconnexion dans 5 secondes...');
-            setTimeout(connectWebSocket, 5000);
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connectWebSocket, 5000);
         };
 
         ws.onerror = (err) => {
             console.error('Erreur WebSocket, fermeture forcée...');
-            ws.close(); 
+            socket.close();
         };
     }
+
+    // Après un gel du PC, une mise en veille ou une coupure réseau, la connexion
+    // peut rester « ouverte » côté Windows alors qu'elle est morte : plus aucun
+    // message n'arrive et onclose ne se déclenche jamais. On repart donc d'une
+    // connexion neuve dans ces cas-là.
+    function reconnectWebSocket() {
+        const previous = ws;
+        clearInterval(pingInterval);
+        pingInterval = null;
+        connectWebSocket();
+        if (previous) {
+            previous.onclose = null;
+            previous.onerror = null;
+            previous.onmessage = null;
+            try { previous.close(); } catch {}
+        }
+    }
+
+    // Détection d'un gel : si ce minuteur de 5 s se réveille bien plus tard que
+    // prévu, le PC (ou l'app) a été bloqué et la connexion est suspecte.
+    let lastFreezeCheck = Date.now();
+    setInterval(() => {
+        const now = Date.now();
+        if (now - lastFreezeCheck > 20000) {
+            console.warn(`Gel détecté (${Math.round((now - lastFreezeCheck) / 1000)} s), reconnexion...`);
+            reconnectWebSocket();
+        }
+        lastFreezeCheck = now;
+    }, 5000);
+    window.addEventListener?.('online', () => reconnectWebSocket());
 
     (async () => {
         await restoreSavedSettings();
