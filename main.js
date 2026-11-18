@@ -182,6 +182,28 @@ ipcMain.handle('stop-media', event => {
   }
 });
 
+// --- RESTER HORS DE LA BARRE DES TÂCHES ---
+// Sous Windows, skipTaskbar passe par l'API de la barre des tâches d'Explorer :
+// si Explorer redémarre (plantage, mise à jour, changement d'écran, sortie de
+// veille…), il « oublie » ce réglage et la fenêtre de l'overlay réapparaît
+// dans la barre des tâches avec l'icône et le nom « Electron ». On rend donc les
+// fenêtres invisibles non activables (style Windows qui exclut de la barre des
+// tâches durablement) et on réapplique skipTaskbar régulièrement.
+function keepOffTaskbar(window) {
+  if (window && !window.isDestroyed()) window.setSkipTaskbar(true);
+}
+
+function hideOverlayFromTaskbar() {
+  keepOffTaskbar(mainWindow);
+  keepOffTaskbar(closeWindow);
+}
+
+function watchTaskbar(window) {
+  for (const eventName of ['show', 'restore', 'focus', 'unmaximize', 'leave-full-screen']) {
+    window.on(eventName, () => keepOffTaskbar(window));
+  }
+}
+
 function updateCloseButton() {
   if (!closeButtonReady || !closeWindow || closeWindow.isDestroyed()) return;
   if (mediaActive) {
@@ -208,9 +230,10 @@ function createCloseButton() {
   closeWindow = new BrowserWindow({
     parent: mainWindow,
     width: 32, height: 32, transparent: true, frame: false, resizable: false,
-    skipTaskbar: true, alwaysOnTop: true, focusable: false, show: false,
+    skipTaskbar: true, alwaysOnTop: true, focusable: false, show: false, icon: path.join(__dirname, 'icon.png'),
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') }
   });
+  watchTaskbar(closeWindow);
   positionCloseButton();
   closeWindow.setAlwaysOnTop(true, 'screen-saver');
   closeWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -277,6 +300,9 @@ async function scrapeInstagramVideo(embedUrl) {
   return new Promise((resolve) => {
     const scraperWindow = new BrowserWindow({
       show: false,
+      skipTaskbar: true,
+      focusable: false,
+      icon: path.join(__dirname, 'icon.png'),
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -470,6 +496,11 @@ function createWindow () {
     frame: false,
     alwaysOnTop: true,
     skipTaskbar: true,
+    // Non activable : l'overlay ne prend jamais le focus et Windows ne lui
+    // donne pas de bouton dans la barre des tâches, même après un redémarrage
+    // d'Explorer. Les clics le traversent déjà (setIgnoreMouseEvents).
+    focusable: false,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -479,6 +510,7 @@ function createWindow () {
   });
 
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  watchTaskbar(mainWindow);
 
   mainWindow.setIgnoreMouseEvents(true);
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -498,6 +530,7 @@ function createWindow () {
   topmostInterval = setInterval(() => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
+      hideOverlayFromTaskbar();
       // Raise the clickable control after its transparent parent, without focus.
       updateCloseButton();
     }
@@ -516,7 +549,11 @@ else app.whenReady().then(async () => {
   screen.on('display-metrics-changed', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setBounds(screen.getPrimaryDisplay().bounds);
     positionCloseButton();
+    hideOverlayFromTaskbar();
   });
+  for (const eventName of ['display-added', 'display-removed']) screen.on(eventName, hideOverlayFromTaskbar);
+  const { powerMonitor } = require('electron');
+  for (const eventName of ['resume', 'unlock-screen']) powerMonitor.on(eventName, () => setTimeout(hideOverlayFromTaskbar, 1000));
   createTray();
 
   // Import the current Windows choice on migration; never force-enable it at startup.
