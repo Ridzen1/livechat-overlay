@@ -24,6 +24,12 @@ La petite croix à droite du pseudo de l'émetteur apparaît uniquement lorsqu'u
 
 Le format YouTube **Automatique** utilise un lecteur vertical 9:16 pour les liens `/shorts/` et horizontal 16:9 pour les autres liens. Pour une vidéo verticale partagée avec un lien `youtu.be` ou `watch`, choisir **Vertical**. Le changement redimensionne le lecteur en cours sans relancer la vidéo. Cela évite les bandes latérales dues au lecteur horizontal, mais ne supprime pas les bandes encodées dans la vidéo. À faible zoom, le lecteur conserve une surface minimale de 200 × 200 pixels.
 
+### Clips musicaux et vidéos sous copyright
+
+Les maisons de disques bloquent souvent la lecture de leurs clips dans les lecteurs intégrés qui ne s'identifient pas (adresse locale `127.0.0.1`, application Electron). L'overlay se présente donc à YouTube comme l'application `https://com.livechat.overlay/`, comme YouTube le demande aux applications qui intègrent son lecteur, et avec l'identifiant de navigateur Chrome standard. Seule la requête du lecteur intégré est concernée.
+
+Certaines vidéos restent illisibles : quand le propriétaire désactive complètement l'intégration ou limite la vidéo à youtube.com, aucun lecteur intégré ne peut la lire. L'overlay affiche alors « le propriétaire de cette vidéo bloque sa lecture hors de YouTube » avec le code d'erreur YouTube (101, 150, 152 ou 153).
+
 ## Application et cache
 
 Dans **Application & maintenance**, la case **Démarrer avec Windows** permet d'activer ou désactiver le démarrage automatique de l'exécutable portable. Au premier lancement de cette version, le choix déjà présent dans Windows est conservé. La remise à zéro des réglages d'affichage ne modifie pas ce choix. En développement, cette case ne modifie pas le démarrage de Windows.

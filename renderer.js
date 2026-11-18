@@ -254,7 +254,9 @@
         youtubePlayer = new YT.Player(mount, {
             ...youtubeSize(),
             videoId: info.id,
-            playerVars: { autoplay: 0, playsinline: 1, start: info.start, origin: location.origin },
+            // origin must stay the real page origin for the API's postMessage channel;
+            // widget_referrer matches the app identity sent as Referer (media-network.js).
+            playerVars: { autoplay: 0, playsinline: 1, start: info.start, origin: location.origin, widget_referrer: 'https://com.livechat.overlay/' },
             events: {
                 onReady: event => {
                     if (token !== generation) return;
@@ -281,7 +283,9 @@
                     }
                 },
                 onApiChange: disableCaptions,
-                onError: event => failed(`YouTube : vidéo indisponible ou intégration refusée (code ${event.data})`),
+                onError: event => failed([101, 150, 152, 153].includes(event.data)
+                    ? `YouTube : le propriétaire de cette vidéo bloque sa lecture hors de YouTube (code ${event.data})`
+                    : `YouTube : vidéo indisponible (code ${event.data})`),
                 onAutoplayBlocked: () => failed('YouTube : lecture automatique bloquée')
             }
         });
