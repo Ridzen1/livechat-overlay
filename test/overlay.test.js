@@ -5,20 +5,36 @@ const fs = require('node:fs');
 const path = require('node:path');
 const MediaUtils = require('../media-utils');
 const { startOverlayServer } = require('../overlay-server');
-const { configureMediaRequests } = require('../media-network');
+const { configureMediaRequests, YOUTUBE_REFERER } = require('../media-network');
 
-test('Twitter media omit the loopback Referer without changing other headers or YouTube', () => {
+function mediaHandler(userAgent = 'Mozilla/5.0 Chrome/140.0.0.0 livechat-overlay/1.0.0 Electron/38.0.0 Safari/537.36') {
     let handler;
     configureMediaRequests({ webRequest: { onBeforeSendHeaders(filter, callback) {
-        assert.deepEqual(filter.urls, ['https://video.twimg.com/*']);
+        assert.deepEqual(filter.urls, ['https://video.twimg.com/*', 'https://www.youtube.com/*', 'https://www.youtube-nocookie.com/*']);
         handler = callback;
-    } } });
+    } } }, userAgent);
+    return details => new Promise(resolve => handler(details, result => resolve(result.requestHeaders)));
+}
+
+test('Twitter media omit the loopback Referer without changing other headers', async () => {
+    const handle = mediaHandler();
     const headers = { Referer: 'http://127.0.0.1:1234/', Range: 'bytes=0-', 'User-Agent': 'Electron' };
-    handler({ resourceType: 'media', requestHeaders: headers }, result => {
-        assert.deepEqual(result.requestHeaders, { Range: 'bytes=0-', 'User-Agent': 'Electron' });
-    });
+    assert.deepEqual(await handle({ url: 'https://video.twimg.com/a.mp4', resourceType: 'media', requestHeaders: headers }), { Range: 'bytes=0-', 'User-Agent': 'Electron' });
     assert.ok(headers.Referer);
-    handler({ resourceType: 'xhr', requestHeaders: headers }, result => assert.deepEqual(result.requestHeaders, headers));
+    assert.deepEqual(await handle({ url: 'https://video.twimg.com/a.mp4', resourceType: 'xhr', requestHeaders: headers }), headers);
+});
+
+test('YouTube player identifies the app with an HTTPS Referer and a browser user agent', async () => {
+    const handle = mediaHandler();
+    const embed = await handle({ url: 'https://www.youtube.com/embed/M7lc1UVf-VE', resourceType: 'subFrame', requestHeaders: { referer: 'http://127.0.0.1:1234/', 'User-Agent': 'x' } });
+    assert.deepEqual(embed, { Referer: YOUTUBE_REFERER, 'User-Agent': 'Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36' });
+    // YouTube's own requests keep their youtube.com Referer.
+    const inner = await handle({ url: 'https://www.youtube.com/youtubei/v1/player', resourceType: 'xhr', requestHeaders: { Referer: 'https://www.youtube.com/embed/M7lc1UVf-VE' } });
+    assert.equal(inner.Referer, 'https://www.youtube.com/embed/M7lc1UVf-VE');
+    const foreign = await handle({ url: 'https://www.youtube.com/embed/M7lc1UVf-VE', resourceType: 'subFrame', requestHeaders: { Referer: 'https://example.com/' } });
+    assert.equal(foreign.Referer, 'https://example.com/');
+    const noAgent = mediaHandler(null);
+    assert.deepEqual(await noAgent({ url: 'https://www.youtube.com/iframe_api', resourceType: 'script', requestHeaders: { 'User-Agent': 'a' } }), { 'User-Agent': 'a' });
 });
 
 test('YouTube links, Shorts, embeds and timestamps', () => {
@@ -184,6 +200,7 @@ test('YouTube lifecycle: timestamp, volume, errors, cleanup and text links', asy
     };
     await r.send({ type: 'play_media', text: 'Regarde https://youtu.be/M7lc1UVf-VE?t=42' });
     assert.equal(options.playerVars.start, 42);
+    assert.equal(options.playerVars.widget_referrer, 'https://com.livechat.overlay/');
     options.events.onReady({ target: player });
     assert.equal(player.played, true);
     assert.equal(player.unloads, 1);
@@ -196,7 +213,7 @@ test('YouTube lifecycle: timestamp, volume, errors, cleanup and text links', asy
     assert.equal(player.volume, 90);
     options.events.onError({ data: 101 });
     assert.equal(player.destroyed, true);
-    assert.match(r.elements.get('text-container').innerText, /101/);
+    assert.match(r.elements.get('text-container').innerText, /bloque sa lecture hors de YouTube \(code 101\)/);
     await r.send({ type: 'play_media', text: 'new' });
     player.modules = ['captions'];
     options.events.onApiChange({ target: player });
